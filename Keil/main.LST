@@ -1,0 +1,175 @@
+C51 COMPILER V9.53.0.0   MAIN                                                              06/17/2021 20:38:00 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: F:\Programes\Keilc51\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #define uint unsigned int   //16bit
+   3          #define uchar unsigned char  // 8bit
+   4          #define ADCData P2
+   5          
+   6          //uchar code Chanel[]=
+   7          //{
+   8          //  0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f
+   9          //};
+  10          
+  11          sbit OE  = P1^0;
+  12          sbit EOC = P1^1;
+  13          sbit ST  = P1^2;
+  14          sbit CLK = P1^3;
+  15          
+  16          sbit Chanel0 = P0^0;
+  17          sbit Chanel1 = P0^1;
+  18          sbit Chanel2 = P0^2;
+  19          sbit Chanel3 = P0^3;
+  20          
+  21          uchar volData[16];
+  22          
+  23          void DelayMS(uint ms)
+  24          {
+  25   1        uchar i;
+  26   1        while(ms--)
+  27   1        {
+  28   2          for(i=0;i<120;i++);
+  29   2        }
+  30   1      }
+  31          
+  32          uchar GetData(void)
+  33          {
+  34   1        uchar adcData;
+  35   1        ST = 0;
+  36   1        ST = 1;
+  37   1        ST = 0;
+  38   1        while(EOC == 0);
+  39   1        OE = 1;
+  40   1        DelayMS(2);
+  41   1        adcData = ADCData;
+  42   1        OE = 0;
+  43   1        return adcData;
+  44   1      }
+  45          
+  46          
+  47          
+  48          
+  49          void GetDataLoop()
+  50          {
+  51   1        uchar i;
+  52   1        for (i=0;i<16;i++){
+  53   2          Chanel0 = i&1;
+  54   2          Chanel1 = (i>>1)&1;
+  55   2          Chanel2 = (i>>2)&1;
+C51 COMPILER V9.53.0.0   MAIN                                                              06/17/2021 20:38:00 PAGE 2   
+
+  56   2          Chanel3 = (i>>3)&1;
+  57   2      //    Chanel0 = 1;
+  58   2      //    Chanel1 = 0;
+  59   2      //    Chanel2 = 1;
+  60   2      //    Chanel3 = 0;
+  61   2          DelayMS(30); //延时使电压稳定再采集
+  62   2          volData[i] = GetData();
+  63   2          DelayMS(2);
+  64   2        }
+  65   1      }
+  66          
+  67          
+  68          void putc_to_SerialPort(uchar c)
+  69          {
+  70   1        SBUF = c;
+  71   1        while(TI == 0);
+  72   1        TI = 0;
+  73   1        DelayMS(2);
+  74   1      }
+  75          
+  76          
+  77          void send_data(uchar *Data){
+  78   1        uchar i;
+  79   1        for(i=0;i<16;i++){
+  80   2          putc_to_SerialPort(Data[i]);
+  81   2        }
+  82   1      }
+  83          
+  84          
+  85          void puts_to_SerialPort(uchar *s)
+  86          {
+  87   1        while(*s != '\0')
+  88   1        {
+  89   2          putc_to_SerialPort(*s);
+  90   2          s++;
+  91   2        }
+  92   1      }
+  93          
+  94          
+  95          void Init()
+  96          {
+  97   1        TMOD = 0x22; //1-串口，0-模拟时钟
+  98   1        TH0 = 0x14;
+  99   1        TL0 = 0x00;
+ 100   1        ET0 = 1;
+ 101   1        TR0 = 1; //定时器0开始工作
+ 102   1        IT0 = 1; //定时器0中断开启
+ 103   1        
+ 104   1        SCON=0X50; //10位UART工作模式
+ 105   1        PCON = 0X00; //波特率不加倍
+ 106   1        TH1 = 0xfd; //波特率9600
+ 107   1        TL1 = 0xfd;
+ 108   1        ES=0; //关闭串口中断
+ 109   1        EA=1; //开启全局中断
+ 110   1        IP = 0x01;
+ 111   1        TI = 0;
+ 112   1        TR1=1; //定时器1开始工作
+ 113   1        
+ 114   1      }
+ 115          
+ 116          void main()
+ 117          {
+C51 COMPILER V9.53.0.0   MAIN                                                              06/17/2021 20:38:00 PAGE 3   
+
+ 118   1        uchar i;
+ 119   1        Init();
+ 120   1        P1 = 0x0f;  
+ 121   1        i=0;
+ 122   1        while(1)
+ 123   1        {
+ 124   2      //    puts_to_SerialPort("\r\n");
+ 125   2          GetDataLoop();
+ 126   2          putc_to_SerialPort(0x00); //发送开始标志
+ 127   2          send_data(volData);
+ 128   2          putc_to_SerialPort(0xff); //发送结束标志
+ 129   2          puts_to_SerialPort("\r\n");//发送结束标志
+ 130   2      //    puts_to_SerialPort("next\r\n");
+ 131   2          DelayMS(500);
+ 132   2          
+ 133   2        }
+ 134   1      }
+ 135          
+ 136          
+ 137          void Timer0_INT() interrupt 1
+ 138          {
+ 139   1        CLK = !CLK;
+ 140   1      }
+ 141          
+ 142          //void serial() interrupt 4
+ 143          //{
+ 144          //  if(RI){
+ 145          //    RI = 0;
+ 146          //  }
+ 147          
+ 148          //}
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    272    ----
+   CONSTANT SIZE    =      3    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     16       7
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
